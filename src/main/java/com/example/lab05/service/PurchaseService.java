@@ -1,6 +1,10 @@
 package com.example.lab05.service;
 
 import com.example.lab05.dto.PurchaseRequest;
+import com.example.lab05.model.Product;
+import com.example.lab05.model.cassandra.SensorReading;
+import com.example.lab05.model.cassandra.SensorReadingKey;
+import com.example.lab05.model.elastic.ProductDocument;
 import com.example.lab05.model.mongo.PurchaseReceipt;
 import com.example.lab05.repository.mongo.PurchaseReceiptRepository;
 import org.slf4j.Logger;
@@ -8,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -44,11 +49,18 @@ public class PurchaseService {
     public PurchaseReceipt executePurchase(PurchaseRequest request) {
         // Step 1 — PostgreSQL (HARD dependency)
         // Look up the product by productId.
-        com.example.lab05.model.Product product = productService.getProductById(request.productId());
+        Product product = productService.getProductById(request.productId());
         
         // Validate stockQuantity >= requested quantity
         if (product.getStockQuantity() < request.quantity()) {
             throw new RuntimeException("Insufficient stock for product ID: " + request.productId());
+        }
+        if (request.purchaseDetails() == null) {
+            throw new RuntimeException("Purchase details cannot be null");
+        }
+
+        if (request.quantity() <= 0) {
+            throw new RuntimeException("Quantity must be greater than 0");
         }
         
         // Deduct stock and save
@@ -57,7 +69,7 @@ public class PurchaseService {
 
         // Step 2 — MongoDB (HARD dependency)
         // Create and save PurchaseReceipt
-        com.example.lab05.model.mongo.PurchaseReceipt receipt = new com.example.lab05.model.mongo.PurchaseReceipt(
+        PurchaseReceipt receipt = new PurchaseReceipt(
                 request.personName(),
                 product.getName(),
                 product.getCategory(),
@@ -77,10 +89,10 @@ public class PurchaseService {
 
         // Step 4 — Cassandra (try-catch)
         try {
-            com.example.lab05.model.cassandra.SensorReading event = new com.example.lab05.model.cassandra.SensorReading();
-            com.example.lab05.model.cassandra.SensorReadingKey key = new com.example.lab05.model.cassandra.SensorReadingKey();
+            SensorReading event = new SensorReading();
+            SensorReadingKey key = new SensorReadingKey();
             key.setSensorId("user-activity-" + request.personName().toLowerCase());
-            key.setReadingTime(java.time.Instant.now());
+            key.setReadingTime(Instant.now());
             
             event.setKey(key);
             event.setLocation(product.getName());
@@ -97,9 +109,9 @@ public class PurchaseService {
         // Step 5 — Elasticsearch (try-catch)
         try {
             if (product.getStockQuantity() == 0) {
-                java.util.List<com.example.lab05.model.elastic.ProductDocument> searchResults = searchService.searchByName(product.getName());
+                List<ProductDocument> searchResults = searchService.searchByName(product.getName());
                 if (searchResults != null && !searchResults.isEmpty()) {
-                    com.example.lab05.model.elastic.ProductDocument doc = searchResults.get(0);
+                    ProductDocument doc = searchResults.get(0);
                     doc.setInStock(false);
                     searchService.saveProduct(doc);
                 }
@@ -111,7 +123,7 @@ public class PurchaseService {
 
         // Step 6 — Redis (try-catch)
         try {
-            // we will implement dashboard later, but this serves as the eviction logic
+            
             redisTemplate.delete("dashboard:" + request.personName());
         } catch (Exception e) {
             log.warn("Failed to evict dashboard cache for {}",
