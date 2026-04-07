@@ -8,6 +8,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 /**
  * Orchestrates the purchase flow across all 6 databases.
  */
@@ -69,8 +71,8 @@ public class PurchaseService {
         try {
             socialGraphService.purchase(request.personName(), product.getName(), request.quantity(), product.getPrice());
         } catch (Exception e) {
-            log.warn("Failed to create PURCHASED edge for {} -> {}: {}",
-                    request.personName(), product.getName(), e.getMessage());
+            log.warn("Failed to create PURCHASED edge for {} -> {}",
+                    request.personName(), product.getName(), e);
         }
 
         // Step 4 — Cassandra (try-catch)
@@ -88,8 +90,8 @@ public class PurchaseService {
             
             sensorService.recordReading(event);
         } catch (Exception e) {
-            log.warn("Failed to log purchase event for {}: {}",
-                    request.personName(), e.getMessage());
+            log.warn("Failed to log purchase event for {}",
+                    request.personName(), e);
         }
 
         // Step 5 — Elasticsearch (try-catch)
@@ -103,8 +105,8 @@ public class PurchaseService {
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to update ES inStock for product {}: {}",
-                    product.getId(), e.getMessage());
+            log.warn("Failed to update ES inStock for product {}",
+                    product.getId(), e);
         }
 
         // Step 6 — Redis (try-catch)
@@ -112,10 +114,14 @@ public class PurchaseService {
             // we will implement dashboard later, but this serves as the eviction logic
             redisTemplate.delete("dashboard:" + request.personName());
         } catch (Exception e) {
-            log.warn("Failed to evict dashboard cache for {}: {}",
-                    request.personName(), e.getMessage());
+            log.warn("Failed to evict dashboard cache for {}",
+                    request.personName(), e);
         }
 
         return receipt;
+    }
+    
+    public List<PurchaseReceipt> getPurchasesByPerson(String personName) {
+        return mongoRepo.findByPersonName(personName);
     }
 }

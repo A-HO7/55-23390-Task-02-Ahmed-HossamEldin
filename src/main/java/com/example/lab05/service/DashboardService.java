@@ -61,7 +61,7 @@ public class DashboardService {
                 );
             }
         } catch (Exception e) {
-            log.warn("Redis cache check failed for {}: {}", personName, e.getMessage());
+            log.warn("Redis cache check failed for {}", personName, e);
         }
 
         // --- Assemble Dashboard Freshly ---
@@ -85,7 +85,7 @@ public class DashboardService {
             List<Person> fofNodes = socialGraphService.getFriendsOfFriends(personName);
             friendsOfFriends = fofNodes.stream().map(Person::getName).collect(Collectors.toList());
         } catch (Exception e) {
-            log.warn("Failed to fetch Neo4j data for {}: {}", personName, e.getMessage());
+            log.warn("Failed to fetch Neo4j data for {}", personName, e);
         }
 
         // Step 3 — Cassandra (Soft dependency)
@@ -93,7 +93,7 @@ public class DashboardService {
         try {
             recentActivity = sensorService.getLatestReadings("user-activity-" + personName.toLowerCase(), 10);
         } catch (Exception e) {
-            log.warn("Failed to fetch activity for {}: {}", personName, e.getMessage());
+            log.warn("Failed to fetch activity for {}", personName, e);
         }
 
         // Step 4 — Elasticsearch (Soft dependency)
@@ -117,7 +117,7 @@ public class DashboardService {
                 youMightAlsoLike.addAll(categorySuggestions);
             }
         } catch (Exception e) {
-            log.warn("Failed to fetch ES suggestions for {}: {}", personName, e.getMessage());
+            log.warn("Failed to fetch ES suggestions for {}", personName, e);
         }
 
         // Step 5 — Construct and cache (try-catch on cache save)
@@ -136,7 +136,7 @@ public class DashboardService {
         try {
             redisTemplate.opsForValue().set(cacheKey, response, Duration.ofMinutes(5));
         } catch (Exception e) {
-            log.warn("Failed to cache dashboard for {}: {}", personName, e.getMessage());
+            log.warn("Failed to cache dashboard for {}", personName, e);
         }
 
         return response;
