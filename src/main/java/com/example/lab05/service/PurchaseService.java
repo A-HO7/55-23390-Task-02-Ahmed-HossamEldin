@@ -13,7 +13,9 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Orchestrates the purchase flow across all 6 databases.
@@ -55,13 +57,12 @@ public class PurchaseService {
         if (product.getStockQuantity() < request.quantity()) {
             throw new RuntimeException("Insufficient stock for product ID: " + request.productId());
         }
-        if (request.purchaseDetails() == null) {
-            throw new RuntimeException("Purchase details cannot be null");
-        }
-
         if (request.quantity() <= 0) {
             throw new RuntimeException("Quantity must be greater than 0");
         }
+
+        Map<String, Object> details = request.purchaseDetails() != null 
+                ? request.purchaseDetails() : new HashMap<>();
         
         // Deduct stock and save
         product.setStockQuantity(product.getStockQuantity() - request.quantity());
@@ -75,7 +76,7 @@ public class PurchaseService {
                 product.getCategory(),
                 request.quantity(),
                 product.getPrice(),
-                request.purchaseDetails()
+                details
         );
         receipt = mongoRepo.save(receipt);
 
